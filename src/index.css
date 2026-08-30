@@ -1521,7 +1521,8 @@ body {
 .home-page-container {
   position: relative;
   width: 100%;
-  padding: 40px 16px;
+  height: calc(100vh - 130px);
+  min-height: 500px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1572,8 +1573,8 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 40px 24px;
-  max-width: 560px;
+  padding: 20px 24px;
+  max-width: 620px;
   animation: homeSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 

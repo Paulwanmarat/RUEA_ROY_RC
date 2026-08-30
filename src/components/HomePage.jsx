@@ -1,4 +1,12 @@
 import React from 'react';
+import {
+  IconZap,
+  IconGamepad,
+  IconRadio,
+  IconBookOpen,
+  IconArrowRight,
+  IconCpu
+} from './Icons';
 
 export function HomePage({ onEnter, onExploreDocs }) {
   return (
@@ -20,24 +28,34 @@ export function HomePage({ onEnter, onExploreDocs }) {
         </p>
 
         <div className="home-badges">
-          <span className="home-badge">⚡ Web Bluetooth &amp; Serial</span>
-          <span className="home-badge">🎮 Touch &amp; Keyboard Control</span>
-          <span className="home-badge">📡 Wi-Fi Bridge Relay</span>
-          <span className="home-badge">📚 Technical Repository</span>
+          <span className="home-badge">
+            <IconZap className="badge-icon" /> Web Bluetooth
+          </span>
+          <span className="home-badge">
+            <IconGamepad className="badge-icon" /> Touch &amp; Keyboard
+          </span>
+          <span className="home-badge">
+            <IconRadio className="badge-icon" /> Wi-Fi Relay
+          </span>
+          <span className="home-badge">
+            <IconBookOpen className="badge-icon" /> Tech Docs
+          </span>
         </div>
 
         <div className="home-cta-group">
           <button className="home-enter-btn primary-btn" onClick={onEnter}>
-            <span>🚀 Launch Controller</span>
-            <span className="enter-arrow">→</span>
+            <IconGamepad className="btn-icon" />
+            <span>Launch Controller</span>
+            <IconArrowRight className="enter-arrow" />
           </button>
           
           <button className="home-enter-btn secondary-btn" onClick={onExploreDocs}>
-            <span>📚 Technical Library</span>
+            <IconBookOpen className="btn-icon" />
+            <span>Technical Library</span>
           </button>
         </div>
 
-        <p className="home-credit">Developed by SPR41 &bull; RUEA ROY RC Project</p>
+        <p className="home-credit">Developed by SPR41 &bull; RUEA ROY RC Engineering Platform</p>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import React from 'react';
+import { IconShieldAlert } from './Icons';
 
 export function EstopButton({ onEstop, fullWidth = false }) {
   const handleTouchStart = (e) => {
@@ -8,12 +9,12 @@ export function EstopButton({ onEstop, fullWidth = false }) {
 
   return (
     <button
-      class={`btn-estop glow-red ${fullWidth ? 'full-width-estop' : ''}`}
+      className={`btn-estop glow-red ${fullWidth ? 'full-width-estop' : ''}`}
       onClick={onEstop}
       onTouchStart={handleTouchStart}
     >
-      <span class="estop-icon">🛑</span>
-      <span class="estop-label">EMERGENCY STOP {fullWidth ? '(SPACE)' : ''}</span>
+      <IconShieldAlert className="estop-icon" />
+      <span className="estop-label">EMERGENCY STOP {fullWidth ? '(SPACE)' : ''}</span>
     </button>
   );
 }

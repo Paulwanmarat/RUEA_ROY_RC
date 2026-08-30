@@ -6,7 +6,6 @@ export function Header({ isConnected, deviceLabel }) {
       <div className="logo-container">
         <div className="logo-wrapper">
           <img src="/assets/logo.jpg" alt="RUEA ROY RC Logo" className="brand-logo" />
-          <span className="logo-star">✨</span>
         </div>
         <div className="title-meta">
           <h1 className="brand-title">RUEA ROY RC</h1>
