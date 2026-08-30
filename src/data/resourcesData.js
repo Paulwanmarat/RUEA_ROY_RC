@@ -30,22 +30,23 @@ The **RUEA LOY RC Platform** is an autonomous and remote-controlled small-scale 
 ## 2. System Architecture
 - **Microcontroller**: Arduino Nano (ATmega328P @ 16 MHz)
 - **Wireless Link**: HC-06 Bluetooth Classic SPP @ 9600 Baud
-- **Actuation**: MG90S Metal Gear Servo (Steering), 180SH Brushed DC Motor (Propulsion)
+- **Actuation**: MG90S Metal Gear Servo (Steering via angle command), 180SH Brushed DC Motor (Propulsion)
 - **Power Subsystem**: 7.4V LiPo Battery with 5V Linear Voltage Regulator
 
 ## 3. Communication Protocol
-Singular ASCII byte commands transmitted over UART:
-- \`'U'\`: Forward Throttle (ESC 1500 µs)
-- \`'D'\`: Reverse Throttle (ESC 1700 µs)
-- \`'L'\`: Left Steering Servo (130°)
-- \`'R'\`: Right Steering Servo (50°)
-- \`'C'\`: Center Servo (90°)
-- \`'N'\`: Neutral Motor (1000 µs)
-- \`'S'\`: Emergency Stop / Failsafe
-- \`'.'\`: 250ms Heartbeat Keep-Alive Tick
+The firmware uses a hybrid command protocol over UART @ 9600 baud:
+
+| Command | Format | Action | Target Value |
+|---|---|---|---|
+| Forward Throttle | \`'u'\` | ESC Forward | 1000 µs |
+| Reverse Throttle | \`'d'\` | ESC Reverse | 1700 µs |
+| Motor Neutral | \`'n'\` or \`'s'\` | ESC Stop | 1500 µs |
+| Set Steering Angle | \`'x'\` + angle + \`'\\n'\` | Servo write | 0°–180° |
+| Set Failsafe Center | \`'c'\` + angle + \`'\\n'\` | Update center | 0°–180° |
+| Heartbeat Tick | \`'.'\` | Reset timer | — |
 
 ## 4. Failsafe Architecture
-A 1.0-second hardware failsafe timer (\`FAILSAFE_TIMEOUT_MS = 1000\`) monitors incoming serial transmissions. If signal loss occurs, throttle immediately resets to neutral (1000 µs) and steering centers to 90°.
+A 1.0-second hardware failsafe timer monitors incoming serial transmissions. If signal loss occurs, throttle immediately resets to neutral (1500 µs) and steering centers to the calibrated \`failsafeCenter\` position.
     `
   },
   {
@@ -60,14 +61,15 @@ A 1.0-second hardware failsafe timer (\`FAILSAFE_TIMEOUT_MS = 1000\`) monitors i
     status: 'available',
     modalType: 'markdown',
     content: `
-# RUEA LOY RC Platform Overview 🚤
+# RUEA LOY RC Platform Overview
 
 The RUEA LOY RC project bridges mechanical engineering, marine buoyancy physics, embedded C++ control, and web applications.
 
 ### Primary Objectives:
-1. Provide a reliable, low-latency wireless surface vessel controller.
-2. Implement robust multi-layered failsafes (250ms heartbeat pulse, 1.0s signal loss cutoff).
-3. Deliver a mobile-first Progressive Web Application (PWA) with multi-touch D-Pad, haptics, and Web Bluetooth integration.
+- Provide a reliable, low-latency wireless surface vessel controller.
+- Implement robust multi-layered failsafes (250ms heartbeat pulse, 1.0s signal loss cutoff).
+- Deliver a mobile-first Progressive Web Application (PWA) with multi-touch D-Pad, haptics, and Web Bluetooth integration.
+- Support dynamic servo calibration via \`x<angle>\` steering commands and \`c<angle>\` failsafe center updates.
     `
   },
   {
@@ -86,11 +88,18 @@ The RUEA LOY RC project bridges mechanical engineering, marine buoyancy physics,
 
 ### Phase 1: Circuit Prototyping
 - Wired HC-06 Bluetooth module to Arduino Nano SoftwareSerial pins (D10 RX, D11 TX via 1k/2k voltage divider).
-- Configured 2.0-second startup arming delay at 1000 µs pulse width to prevent ESC motor initialization spin-ups.
+- Configured 3.0-second startup arming delay at 1500 µs (neutral) pulse width to prevent ESC motor initialization spin-ups.
+- Steering servo attached to Pin D5 with dynamic angle control via \`x<angle>\\n\` protocol.
 
 ### Phase 2: React Mobile PWA
 - Created responsive touch control decks (Dual-Thumb Split & D-Pad).
 - Integrated Web Audio synthesis and Web Haptic Vibration API.
+- Added dynamic servo calibration GUI in Python Tkinter desktop controller (\`main.py\`).
+
+### Phase 3: Python Desktop Controller
+- Built \`main.py\` Tkinter GUI with WASD keyboard + mouse button control.
+- Added live servo calibration sliders (LEFT/CENTER/RIGHT) with real-time angle preview.
+- Calibration settings saved to \`servo_config.json\` and synced to Arduino via \`c<angle>\` command.
     `
   },
 
@@ -145,15 +154,16 @@ The RUEA LOY RC project bridges mechanical engineering, marine buoyancy physics,
     content: `
 # 30A Mini Brushed ESC Specifications
 
-- **Continuous Current**: 30A
-- **Peak Current**: 40A (10 seconds)
-- **Input Voltage**: 4.8V - 8.4V (2S LiPo / 4-6 cell NiMH)
-- **BEC Output**: 5V 1A Linear Regulator
-- **PWM Input Frequency**: 50 Hz (20ms period)
-- **Pulse Range**:
-  - **Neutral / Stop**: 1000 µs
-  - **Forward Range**: 1100 µs - 1500 µs
-  - **Reverse Range**: 1600 µs - 2000 µs
+| Parameter | Value |
+|---|---|
+| Continuous Current | 30A |
+| Peak Current | 40A (10 seconds) |
+| Input Voltage | 4.8V – 8.4V (2S LiPo / 4–6 cell NiMH) |
+| BEC Output | 5V 1A Linear Regulator |
+| PWM Input Frequency | 50 Hz (20ms period) |
+| Neutral / Stop | 1500 µs |
+| Forward Range | 1000 µs |
+| Reverse Range | 1700 µs |
     `
   },
   {
@@ -170,11 +180,13 @@ The RUEA LOY RC project bridges mechanical engineering, marine buoyancy physics,
     content: `
 # 180SH High-Speed DC Motor Specs
 
-- **Nominal Voltage**: 6.0V DC (Operating range 3.0V - 7.4V)
-- **No-Load Speed**: 15,000 RPM @ 6V
-- **No-Load Current**: 0.25A
-- **Stall Torque**: ~180 g.cm
-- **Shaft Diameter**: 2.0 mm
+| Parameter | Value |
+|---|---|
+| Nominal Voltage | 6.0V DC (Range 3.0V – 7.4V) |
+| No-Load Speed | 15,000 RPM @ 6V |
+| No-Load Current | 0.25A |
+| Stall Torque | ~180 g.cm |
+| Shaft Diameter | 2.0 mm |
     `
   },
   {
@@ -191,9 +203,11 @@ The RUEA LOY RC project bridges mechanical engineering, marine buoyancy physics,
     content: `
 # RC Boat Drive Shaft & Propeller Assembly
 
-- **Drive Shaft**: Stainless Steel 2.0 mm x 150 mm
-- **Stuffing Tube**: Brass 3.0 mm Outer Diameter with waterproof grease seal
-- **Propeller**: 2-Blade Nylon Marine Propeller (30 mm diameter, 1.4 pitch ratio)
+| Component | Specification |
+|---|---|
+| Drive Shaft | Stainless Steel 2.0 mm × 150 mm |
+| Stuffing Tube | Brass 3.0 mm OD with waterproof grease seal |
+| Propeller | 2-Blade Nylon Marine, 30 mm diameter, 1.4 pitch ratio |
     `
   },
   {
@@ -208,31 +222,52 @@ The RUEA LOY RC project bridges mechanical engineering, marine buoyancy physics,
     status: 'available',
     modalType: 'schematic',
     content: `
-+-----------------------------------------------------------------------------------+
-|                              RUEA LOY RC CIRCUIT SCHEMATIC                        |
-+-----------------------------------------------------------------------------------+
+<h1>RUEA LOY RC Circuit Schematic</h1>
+<div class="schematic-visual">
+  <div class="schematic-row">
+    <div class="schematic-box box-power">
+      <div class="box-title">LiPo Battery</div>
+      <div class="box-detail">7.4V 2S 1000mAh</div>
+    </div>
+  </div>
 
-                    +------------------------------------+
-                    |  LiPo Battery 7.4V (2S 1000mAh)    |
-                    +-----------------+------------------+
-                                      |
-                         +------------+------------+
-                         |                         |
-                         v                         v
-               +-------------------+     +--------------------+
-               | 30A Brushed ESC   |     | Buck Regulator 5V  |
-               +---------+---------+     +----------+---------+
-                         |                          |
-       +-----------------+-----------------+        +----------+
-       | Pulse (Pin D3)  | Power (V+)      | Power (VCC)       |
-       v                 v                 v                   v
-+--------------+  +-------------+  +---------------+  +----------------+
-| Arduino Nano |  | 180SH Motor |  | MG90S Servo   |  | HC-06 BT       |
-| ATmega328P   |  +-------------+  | (Pin D9 PWM)  |  | (SoftwareSerial|
-+-------+------+                   +---------------+  |  RX:D10, TX:D11|
-        |                                             +----------------+
-        | Pins D10 (RX) & D11 (TX via 1k/2k Divider)          ^
-        +-----------------------------------------------------+
+  <div class="schematic-connector">POWER DISTRIBUTION</div>
+
+  <div class="schematic-row">
+    <div class="schematic-box box-power">
+      <div class="box-title">30A Brushed ESC</div>
+      <div class="box-detail">Pulse input from Pin D3<br/>Neutral: 1500 µs</div>
+    </div>
+    <div class="schematic-box box-power">
+      <div class="box-title">Buck Regulator</div>
+      <div class="box-detail">5V output for logic &amp; servo</div>
+    </div>
+  </div>
+
+  <div class="schematic-connector">SIGNAL &amp; POWER LINES</div>
+
+  <div class="schematic-row">
+    <div class="schematic-box box-mcu">
+      <div class="box-title">Arduino Nano</div>
+      <div class="box-detail">ATmega328P @ 16 MHz<br/>ESC → Pin D3<br/>Servo → Pin D5<br/>BT RX → D10, TX → D11</div>
+    </div>
+    <div class="schematic-box">
+      <div class="box-title">180SH Motor</div>
+      <div class="box-detail">Brushed DC Motor<br/>Powered by ESC output</div>
+    </div>
+  </div>
+
+  <div class="schematic-row">
+    <div class="schematic-box">
+      <div class="box-title">MG90S Servo</div>
+      <div class="box-detail">Steering on Pin D5<br/>Dynamic angle: x&lt;angle&gt;</div>
+    </div>
+    <div class="schematic-box box-wireless">
+      <div class="box-title">HC-06 Bluetooth</div>
+      <div class="box-detail">SoftwareSerial @ 9600<br/>RX: D10, TX: D11<br/>(TX via 1k/2k divider)</div>
+    </div>
+  </div>
+</div>
     `
   },
   {
@@ -249,17 +284,17 @@ The RUEA LOY RC project bridges mechanical engineering, marine buoyancy physics,
     content: `
 # Bill of Materials (BOM)
 
-| Item | Component Description | Qty | Model / Specs | Status |
+| # | Component | Qty | Model / Specs | Status |
 |---|---|---|---|---|
-| 1 | Microcontroller Board | 1 | Arduino Nano ATmega328P | ✅ Installed |
-| 2 | Bluetooth Module | 1 | HC-06 Serial Slave Module | ✅ Installed |
-| 3 | Steering Servo | 1 | MG90S Metal Gear Micro Servo | ✅ Installed |
-| 4 | Motor ESC | 1 | 30A Mini Bi-Directional Brushed ESC | ✅ Installed |
-| 5 | DC Propulsion Motor | 1 | 180SH High-RPM DC Motor | ✅ Installed |
-| 6 | Drive Shaft & Sleeve | 1 | 150mm Stainless Shaft & Brass Tube | ✅ Installed |
-| 7 | Marine Propeller | 1 | 30mm 2-Blade Nylon Propeller | ✅ Installed |
-| 8 | Battery Pack | 1 | 7.4V 2S 1000mAh LiPo Pack | ✅ Installed |
-| 9 | Voltage Resistors | 2 | 1kΩ & 2kΩ Divider Resistors | ✅ Installed |
+| 1 | Microcontroller Board | 1 | Arduino Nano ATmega328P | Installed |
+| 2 | Bluetooth Module | 1 | HC-06 Serial Slave Module | Installed |
+| 3 | Steering Servo | 1 | MG90S Metal Gear Micro Servo | Installed |
+| 4 | Motor ESC | 1 | 30A Mini Bi-Directional Brushed ESC | Installed |
+| 5 | DC Propulsion Motor | 1 | 180SH High-RPM DC Motor | Installed |
+| 6 | Drive Shaft & Sleeve | 1 | 150mm Stainless Shaft & Brass Tube | Installed |
+| 7 | Marine Propeller | 1 | 30mm 2-Blade Nylon Propeller | Installed |
+| 8 | Battery Pack | 1 | 7.4V 2S 1000mAh LiPo Pack | Installed |
+| 9 | Voltage Resistors | 2 | 1kΩ & 2kΩ Divider Resistors | Installed |
     `
   },
 
@@ -276,95 +311,98 @@ The RUEA LOY RC project bridges mechanical engineering, marine buoyancy physics,
     status: 'available',
     modalType: 'code',
     language: 'cpp',
-    content: `/*
- * Project: Ruea-Roy RC By SPR41 🚤🎮
- * Target Hardware: Arduino Nano, HC-06 Bluetooth, MG90S Servo, ESC & Motor
- */
-
-#include <SoftwareSerial.h>
+    content: `#include <SoftwareSerial.h>
 #include <Servo.h>
 
-#define BT_RX_PIN     10  // Nano D10 connected to HC-06 TX
-#define BT_TX_PIN     11  // Nano D11 connected to HC-06 RX
-#define SERVO_PIN     9   // MG90S Steering Servo
-#define ESC_PIN       3   // Electronic Speed Controller (ESC)
+const int RX_PIN = 10;
+const int TX_PIN = 11;
+const int ESC_PIN = 3;
+const int STEERING_PIN = 5;
 
-#define SERVO_CENTER   90  // Straight / Neutral steering (degrees)
-#define SERVO_LEFT    130  // Full left turn (degrees)
-#define SERVO_RIGHT    50  // Full right turn (degrees)
+// --- ESC SETTINGS ---
+int ESC_STOP = 1500;     
+const int ESC_FORWARD = 1000;  
+const int ESC_BACKWARD = 1700; 
 
-#define ESC_STOP     1000  // Motor Stop pulse width (µs)
-#define ESC_UP       1500  // Forward throttle pulse width (µs)
-#define ESC_DOWN     1700  // Reverse throttle pulse width (µs)
-
-#define FAILSAFE_TIMEOUT_MS 1000  // Failsafe timeout (1.0 second)
-
-SoftwareSerial BTSerial(BT_RX_PIN, BT_TX_PIN);
+SoftwareSerial btSerial(RX_PIN, TX_PIN);
+Servo esc;
 Servo steeringServo;
-Servo escMotor;
 
-int currentServoAngle = -1;
-int currentESCPulse   = -1;
 unsigned long lastCmdTime = 0;
-bool failsafeActive       = false;
+bool failsafeActive = false;
 
-void setServoAngle(int angle) {
-  angle = constrain(angle, 30, 150);
-  if (angle != currentServoAngle) {
-    steeringServo.write(angle);
-    currentServoAngle = angle;
-  }
-}
-
-void setESCPulse(int pulseUs) {
-  pulseUs = constrain(pulseUs, 1000, 2000);
-  if (pulseUs != currentESCPulse) {
-    escMotor.writeMicroseconds(pulseUs);
-    currentESCPulse = pulseUs;
-  }
-}
-
-void triggerFailsafe() {
-  setESCPulse(ESC_STOP);
-  setServoAngle(SERVO_CENTER);
-  failsafeActive = true;
-}
+// Default center position (will be updated by the GUI)
+int failsafeCenter = 90; 
 
 void setup() {
-  Serial.begin(9600);
-  BTSerial.begin(9600);
+  esc.attach(ESC_PIN);
+  esc.writeMicroseconds(ESC_STOP);
 
-  steeringServo.attach(SERVO_PIN);
-  escMotor.attach(ESC_PIN);
+  steeringServo.attach(STEERING_PIN);
+  steeringServo.write(failsafeCenter);
 
-  setServoAngle(SERVO_CENTER);
-  setESCPulse(ESC_STOP);
+  delay(3000); // Wait for ESC arming
 
-  delay(2000); // 2-second ESC arming delay
+  btSerial.begin(9600);
   lastCmdTime = millis();
-  failsafeActive = false;
 }
 
 void loop() {
-  while (BTSerial.available() > 0) {
-    char cmd = BTSerial.read();
+  if (btSerial.available() > 0) {
+    char cmd = btSerial.read();
+    
+    // Ignore newline characters left over from data packets
+    if (cmd == '\\r' || cmd == '\\n') return; 
 
-    switch (cmd) {
-      case 'L': case 'l': setServoAngle(SERVO_LEFT); lastCmdTime = millis(); failsafeActive = false; break;
-      case 'R': case 'r': setServoAngle(SERVO_RIGHT); lastCmdTime = millis(); failsafeActive = false; break;
-      case 'C': case 'c': setServoAngle(SERVO_CENTER); lastCmdTime = millis(); failsafeActive = false; break;
-      case 'U': case 'u': setESCPulse(ESC_UP); lastCmdTime = millis(); failsafeActive = false; break;
-      case 'D': case 'd': setESCPulse(ESC_DOWN); lastCmdTime = millis(); failsafeActive = false; break;
-      case 'N': case 'n': setESCPulse(ESC_STOP); lastCmdTime = millis(); failsafeActive = false; break;
-      case 'S': case 's': triggerFailsafe(); lastCmdTime = millis(); failsafeActive = false; break;
-      case '.': lastCmdTime = millis(); failsafeActive = false; break;
-      default: break;
+    cmd = tolower(cmd);
+    bool validCommand = false;
+
+    // --- Motor Commands ---
+    if (cmd == 'u') {
+      esc.writeMicroseconds(ESC_FORWARD);
+      failsafeActive = false;
+      validCommand = true;
+    } 
+    else if (cmd == 'd') {
+      esc.writeMicroseconds(ESC_BACKWARD);
+      failsafeActive = false;
+      validCommand = true;
+    } 
+    else if (cmd == 'n' || cmd == 's') { 
+      esc.writeMicroseconds(ESC_STOP);
+      failsafeActive = false;
+      validCommand = true;
+    } 
+    // --- Steering Commands (Dynamic Angle) ---
+    else if (cmd == 'x') {
+      int angle = btSerial.parseInt();
+      angle = constrain(angle, 0, 180); 
+      steeringServo.write(angle);
+      failsafeActive = false;
+      validCommand = true;
+    }
+    // Update Failsafe Center Position
+    else if (cmd == 'c') {
+      failsafeCenter = btSerial.parseInt();
+      failsafeCenter = constrain(failsafeCenter, 0, 180);
+      validCommand = true;
+    }
+    // Heartbeat
+    else if (cmd == '.') { 
+      validCommand = true;
+    }
+
+    if (validCommand) {
+      lastCmdTime = millis();
     }
   }
 
-  if (millis() - lastCmdTime >= FAILSAFE_TIMEOUT_MS) {
+  // --- FAILSAFE ---
+  if (millis() - lastCmdTime >= 1000) {
     if (!failsafeActive) {
-      triggerFailsafe();
+      failsafeActive = true;
+      esc.writeMicroseconds(ESC_STOP);
+      steeringServo.write(failsafeCenter);
     }
   }
 }
@@ -388,6 +426,8 @@ void loop() {
 - **Responsive Layout**: Designed for phones, tablets, and desktop displays.
 - **Custom Hooks**: \`useBluetooth\`, \`useControls\`, \`useHapticsAudio\`.
 - **PWA Capabilities**: Service worker caching & manifest for home screen installation.
+- **Theme System**: Light Mode, Dark Mode, and System/OS preference with \`useTheme\` hook.
+- **Steering Protocol**: Sends \`x<angle>\\n\` commands (e.g. \`x45\\n\`, \`x90\\n\`, \`x135\\n\`) matching firmware \`btSerial.parseInt()\`.
     `
   },
   {
@@ -400,24 +440,23 @@ void loop() {
     description: 'Component tree and state management architecture explaining event flow between touch inputs, state deduplication, and serial transmission.',
     actionLabel: 'View Diagram',
     status: 'available',
-    modalType: 'markdown',
+    modalType: 'schematic',
     content: `
-# React App Architecture
-
-\`\`\`
-[ Touch Inputs / Keyboards ] ──► [ useControls Hook ]
-                                        │
-                                        ▼ (State Deduplication)
-                                [ useBluetooth Hook ]
-                                        │
-             ┌──────────────────────────┴──────────────────────────┐
-             ▼                                                     ▼
-     [ Web Serial / Bluetooth ]                             [ Wi-Fi Bridge Server ]
-             │                                                     │
-             └──────────────────────────┬──────────────────────────┘
-                                        ▼
-                               [ Arduino Nano ]
-\`\`\`
+<h1>React App Architecture</h1>
+<div class="diagram-flow">
+  <div class="diagram-node node-start">Touch Inputs / Keyboard (WASD)</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-process">useControls Hook — State Deduplication<br/><small>Maps keys to throttle (u/d/n) &amp; steering (x&lt;angle&gt;)</small></div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-process">useBluetooth Hook — Transport Layer<br/><small>250ms heartbeat, serial write, error recovery</small></div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-branch">
+    <div class="diagram-node">Web Serial / Bluetooth<br/><small>Direct USB or BLE</small></div>
+    <div class="diagram-node">Wi-Fi Bridge Server<br/><small>server.py HTTP relay</small></div>
+  </div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-end">Arduino Nano — RUEA_LOY.ino</div>
+</div>
     `
   },
   {
@@ -427,23 +466,27 @@ void loop() {
     tag: 'Software',
     type: 'API Reference',
     iconName: 'Terminal',
-    description: 'Exact ASCII single-byte command dictionary used by the mobile client and hardware firmware.',
+    description: 'Command dictionary used by mobile client, Python GUI, and Arduino firmware.',
     actionLabel: 'View Reference',
     status: 'available',
     modalType: 'markdown',
     content: `
-# Bluetooth Serial Command Reference (9600 Baud)
+# Serial Command Reference (9600 Baud)
 
-| Character | Command Name | Action Executed | Servo Target | ESC Pulse |
+| Command | Format | Action | ESC Pulse | Servo Angle |
 |---|---|---|---|---|
-| \`'U'\` | Forward | Motor Forward Throttle | Unchanged | 1500 µs |
-| \`'D'\` | Reverse | Motor Reverse Throttle | Unchanged | 1700 µs |
-| \`'N'\` | Neutral | Motor Stop | Unchanged | 1000 µs |
-| \`'L'\` | Steering Left | Turn Rudder Left | 130° | Unchanged |
-| \`'R'\` | Steering Right | Turn Rudder Right | 50° | Unchanged |
-| \`'C'\` | Steering Center | Center Rudder | 90° | Unchanged |
-| \`'S'\` | Emergency Stop | Immediate Failsafe Stop | 90° | 1000 µs |
-| \`'.'\` | Heartbeat Tick | Reset Failsafe Timer | Unchanged | Unchanged |
+| Forward | \`'u'\` | Motor forward throttle | 1000 µs | Unchanged |
+| Reverse | \`'d'\` | Motor reverse throttle | 1700 µs | Unchanged |
+| Neutral | \`'n'\` or \`'s'\` | Motor stop / neutral | 1500 µs | Unchanged |
+| Steer | \`'x'\` + angle + \`'\\n'\` | Set servo angle | Unchanged | 0°–180° |
+| Set Center | \`'c'\` + angle + \`'\\n'\` | Update failsafe center | Unchanged | 0°–180° |
+| Heartbeat | \`'.'\` | Reset failsafe timer | Unchanged | Unchanged |
+
+### Protocol Notes:
+- All motor commands are single ASCII characters (\`u\`, \`d\`, \`n\`, \`s\`).
+- Steering uses \`x\` prefix followed by integer angle and newline: e.g. \`x45\\n\`, \`x90\\n\`, \`x135\\n\`.
+- The \`c\` command updates the failsafe center position stored in Arduino RAM.
+- 250ms heartbeat pulses prevent the 1-second failsafe timer from triggering.
     `
   },
   {
@@ -456,30 +499,30 @@ void loop() {
     description: 'Comprehensive software flow diagram illustrating startup sequence, Bluetooth packet polling loop, command parsing, and failsafe execution.',
     actionLabel: 'View Flowchart',
     status: 'available',
-    modalType: 'markdown',
+    modalType: 'schematic',
     content: `
-# Software Control Flowchart
-
-\`\`\`
-  [ STARTUP ]
-       │
-       ▼
-  Attach Servo (D9) & ESC (D3)
-       │
-       ▼
-  Set Servo = 90°, ESC = 1000µs
-       │
-       ▼
-  Delay 2.0 Seconds (ESC Arming)
-       │
-  ┌────┴──────────────────────────┐
-  │      MAIN LOOP (Continuous)   │
-  └────┬──────────────────────────┘
-       │
-       ├──► Serial Available? ──YES──► Read Char ──► Execute Command Case ──► Reset Failsafe Timer
-       │
-       └──► Time since last cmd >= 1000ms? ──YES──► Trigger Failsafe (ESC 1000µs, Servo 90°)
-\`\`\`
+<h1>Software Control Flowchart</h1>
+<div class="diagram-flow">
+  <div class="diagram-node node-start">STARTUP</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-process">Attach ESC (Pin D3) &amp; Servo (Pin D5)</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-process">Set ESC = 1500 µs (Neutral), Servo = 90° (Center)</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-process">Delay 3.0 Seconds — ESC Arming Phase</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-start">MAIN LOOP (Continuous)</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-decision">btSerial.available() &gt; 0 ?</div>
+  <div class="diagram-arrow">YES</div>
+  <div class="diagram-node node-process">Read char → tolower() → Parse command:<br/><strong>u</strong> → ESC 1000µs | <strong>d</strong> → ESC 1700µs | <strong>n/s</strong> → ESC 1500µs<br/><strong>x</strong> → parseInt() → Servo angle | <strong>c</strong> → Update failsafe center<br/><strong>.</strong> → Heartbeat tick</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-process">Reset lastCmdTime = millis()</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-decision">millis() − lastCmdTime ≥ 1000ms ?</div>
+  <div class="diagram-arrow">YES — Signal Lost!</div>
+  <div class="diagram-node node-end">FAILSAFE: ESC → 1500µs, Servo → failsafeCenter</div>
+</div>
     `
   },
   {
@@ -492,14 +535,30 @@ void loop() {
     description: 'Decoupled software layers separating input capture, protocol formatting, transport layers, and hardware pulse generation.',
     actionLabel: 'View Architecture',
     status: 'available',
-    modalType: 'markdown',
+    modalType: 'schematic',
     content: `
-# Software Layer Architecture
-
-1. **User Interface Layer**: React Touch Deck with multi-touch event prevention and Web Audio feedback.
-2. **Protocol Engine Layer**: Asynchronous 250ms periodic state re-transmission preventing buffer congestion.
-3. **Transport Layer**: Chrome Web Serial API / WebSocket bridge with error recovery.
-4. **Firmware Layer**: Arduino SoftwareSerial + Servo microsecond timing control.
+<h1>Software Layer Architecture</h1>
+<div class="diagram-flow">
+  <div class="diagram-node node-start">Layer 1 — User Interface</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-process">React Touch Deck with multi-touch prevention<br/><small>Web Audio synthesis + Web Haptic Vibration API</small></div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-start">Layer 2 — Protocol Engine</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-process">250ms periodic state re-transmission<br/><small>Maps UI state → u/d/n + x&lt;angle&gt;\\n commands</small></div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-start">Layer 3 — Transport</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-branch">
+    <div class="diagram-node">Chrome Web Serial API</div>
+    <div class="diagram-node">WebSocket Bridge</div>
+    <div class="diagram-node">HTTP Fetch Bridge</div>
+  </div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-start">Layer 4 — Firmware</div>
+  <div class="diagram-arrow"></div>
+  <div class="diagram-node node-process">Arduino SoftwareSerial + Servo µs timing<br/><small>btSerial.parseInt() for angle parsing</small></div>
+</div>
     `
   },
 
@@ -511,7 +570,7 @@ void loop() {
     tag: 'Engineering & Mathematics',
     type: 'Physics Model',
     iconName: 'Droplet',
-    description: "Mathematical formulation of buoyant lift forces ($F_b = \\rho \\cdot V \\cdot g$) governing hull displacement and vessel payload equilibrium.",
+    description: "Mathematical formulation of buoyant lift forces ($F_b = \\\\rho \\\\cdot V \\\\cdot g$) governing hull displacement and vessel payload equilibrium.",
     actionLabel: 'View Physics Model',
     status: 'available',
     modalType: 'markdown',
@@ -519,16 +578,16 @@ void loop() {
 # Buoyancy Analysis & Archimedes' Principle
 
 ### Mathematical Model:
-$$F_b = \\rho \\cdot V_{displaced} \\cdot g$$
+$$F_b = \\\\rho \\\\cdot V_{displaced} \\\\cdot g$$
 
 Where:
-- $\\rho = 1000 \\text{ kg/m}^3$ (Density of fresh water)
+- $\\\\rho = 1000 \\\\text{ kg/m}^3$ (Density of fresh water)
 - $V_{displaced}$ = Volume of water displaced by hull
-- $g = 9.81 \\text{ m/s}^2$ (Gravitational acceleration)
+- $g = 9.81 \\\\text{ m/s}^2$ (Gravitational acceleration)
 
 ### Hull Displacement Calculation:
-For a total platform mass $m = 0.650 \\text{ kg}$, required displaced volume:
-$$V = \\frac{m}{\\rho} = \\frac{0.650}{1000} = 6.50 \\times 10^{-4} \\text{ m}^3 = 650 \\text{ cm}^3$$
+For a total platform mass $m = 0.650 \\\\text{ kg}$, required displaced volume:
+$$V = \\\\frac{m}{\\\\rho} = \\\\frac{0.650}{1000} = 6.50 \\\\times 10^{-4} \\\\text{ m}^3 = 650 \\\\text{ cm}^3$$
     `
   },
   {
@@ -549,12 +608,12 @@ $$V = \\frac{m}{\\rho} = \\frac{0.650}{1000} = 6.50 \\times 10^{-4} \\text{ m}^3
 $$GM = KB + BM - KG$$
 
 Where:
-- **KB**: Distance from keel to center of buoyancy ($1.8 \\text{ cm}$)
-- **BM**: Distance from center of buoyancy to metacenter ($4.2 \\text{ cm}$)
-- **KG**: Height of center of gravity above keel ($3.2 \\text{ cm}$)
+- **KB**: Distance from keel to center of buoyancy ($1.8 \\\\text{ cm}$)
+- **BM**: Distance from center of buoyancy to metacenter ($4.2 \\\\text{ cm}$)
+- **KG**: Height of center of gravity above keel ($3.2 \\\\text{ cm}$)
 
 ### Result:
-$$GM = 1.8 + 4.2 - 3.2 = 2.8 \\text{ cm} > 0$$
+$$GM = 1.8 + 4.2 - 3.2 = 2.8 \\\\text{ cm} > 0$$
 Since $GM > 0$, the vessel exhibits positive static stability with inherent self-righting moments.
     `
   },
@@ -574,9 +633,9 @@ Since $GM > 0$, the vessel exhibits positive static stability with inherent self
 
 ### Objective:
 Minimize total surface area $A(d)$ for a fixed volume $V$:
-$$A(d) = B \\cdot L + 2 \\cdot d \\cdot (B + L)$$
+$$A(d) = B \\\\cdot L + 2 \\\\cdot d \\\\cdot (B + L)$$
 
-Setting derivative $\\frac{dA}{dd} = 0$ yields optimal draft depth $d^*$ balancing skin friction and wave-making resistance.
+Setting derivative $\\\\frac{dA}{dd} = 0$ yields optimal draft depth $d^*$ balancing skin friction and wave-making resistance.
     `
   },
   {
@@ -593,10 +652,12 @@ Setting derivative $\\frac{dA}{dd} = 0$ yields optimal draft depth $d^*$ balanci
     content: `
 # Water Displacement Model
 
-- **Hull Length**: 320 mm
-- **Hull Beam (Width)**: 120 mm
-- **Design Draft**: 25 mm
-- **Max Reserve Buoyancy**: 180% of total vessel weight.
+| Parameter | Value |
+|---|---|
+| Hull Length | 320 mm |
+| Hull Beam (Width) | 120 mm |
+| Design Draft | 25 mm |
+| Max Reserve Buoyancy | 180% of total vessel weight |
     `
   },
   {
@@ -606,7 +667,7 @@ Setting derivative $\\frac{dA}{dd} = 0$ yields optimal draft depth $d^*$ balanci
     tag: 'Engineering & Mathematics',
     type: 'Calculations Sheet',
     iconName: 'Calculator',
-    description: 'Comprehensive derivation sheet containing motor power consumption ($P = V \\cdot I$), propeller thrust estimates, and battery endurance models.',
+    description: 'Comprehensive derivation sheet containing motor power consumption ($P = V \\\\cdot I$), propeller thrust estimates, and battery endurance models.',
     actionLabel: 'View Calculations',
     status: 'available',
     modalType: 'markdown',
@@ -614,10 +675,10 @@ Setting derivative $\\frac{dA}{dd} = 0$ yields optimal draft depth $d^*$ balanci
 # System Mathematical Derivations
 
 ### 1. Power Consumption:
-$$P = V \\cdot I = 7.4 \\text{V} \\cdot 2.2 \\text{A} = 16.28 \\text{ Watts}$$
+$$P = V \\\\cdot I = 7.4 \\\\text{V} \\\\cdot 2.2 \\\\text{A} = 16.28 \\\\text{ Watts}$$
 
 ### 2. Theoretical Battery Runtime:
-$$\\text{Runtime} = \\frac{\\text{Capacity (mAh)} \\times 0.8}{\\text{Average Current (mA)}} = \\frac{1000 \\times 0.8}{800} = 1.0 \\text{ Hour (60 mins)}$$
+$$\\\\text{Runtime} = \\\\frac{\\\\text{Capacity (mAh)} \\\\times 0.8}{\\\\text{Average Current (mA)}} = \\\\frac{1000 \\\\times 0.8}{800} = 1.0 \\\\text{ Hour (60 mins)}$$
     `
   },
   {
@@ -634,13 +695,13 @@ $$\\text{Runtime} = \\frac{\\text{Capacity (mAh)} \\times 0.8}{\\text{Average Cu
     content: `
 # Theoretical vs Experimental Comparison
 
-| Parameter | Theoretical Prediction | Measured Result | % Variance |
+| Parameter | Theoretical | Measured | Variance |
 |---|---|---|---|
 | Vessel Weight | 620 g | 645 g | +4.0% |
-| Top Speed | 1.8 m/s | 1.65 m/s | -8.3% |
-| Turn Radius @ 130° | 0.85 m | 0.90 m | +5.8% |
+| Top Speed | 1.8 m/s | 1.65 m/s | −8.3% |
+| Turn Radius @ 45° | 0.85 m | 0.90 m | +5.8% |
 | Signal Range (HC-06) | 10.0 m | 11.2 m | +12.0% |
-| Battery Runtime | 60 mins | 54 mins | -10.0% |
+| Battery Runtime | 60 mins | 54 mins | −10.0% |
     `
   },
 
@@ -670,12 +731,14 @@ $$\\text{Runtime} = \\frac{\\text{Capacity (mAh)} \\times 0.8}{\\text{Average Cu
     content: `
 # RUEA LOY RC Platform Dimensions
 
-- **Overall Length (LOA)**: 340 mm
-- **Beam (Max Width)**: 125 mm
-- **Total Height**: 140 mm
-- **Draft Depth**: 25 mm
-- **Freeboard Height**: 45 mm
-- **Dry Weight**: 645 grams
+| Dimension | Value |
+|---|---|
+| Overall Length (LOA) | 340 mm |
+| Beam (Max Width) | 125 mm |
+| Total Height | 140 mm |
+| Draft Depth | 25 mm |
+| Freeboard Height | 45 mm |
+| Dry Weight | 645 grams |
     `
   },
   {
@@ -713,7 +776,7 @@ $$\\text{Runtime} = \\frac{\\text{Capacity (mAh)} \\times 0.8}{\\text{Average Cu
 
 | Component | Selected Material | Key Property |
 |---|---|---|
-| Hull Hull Structure | Waterproof Acrylic / PETG | High buoyancy, low density |
+| Hull Structure | Waterproof Acrylic / PETG | High buoyancy, low density |
 | Drive Shaft | Stainless Steel 316 | Corrosion resistance |
 | Bearings | Brass | Low friction coefficient |
 | Steering Rudder | Nylon Plastic | High impact strength |
@@ -762,6 +825,10 @@ $$\\text{Runtime} = \\frac{\\text{Capacity (mAh)} \\times 0.8}{\\text{Average Cu
 ### Test 2: Failsafe Execution Test
 - Abrupt Bluetooth disconnect during 100% forward throttle.
 - Result: ESC stopped within 280ms, well within 1.0s timeout limit.
+
+### Test 3: Servo Calibration Test
+- Calibrated LEFT = 45°, CENTER = 90°, RIGHT = 135° via Python GUI sliders.
+- Failsafe center updated via \`c90\\n\` command. Auto-center confirmed on signal loss.
     `
   },
 

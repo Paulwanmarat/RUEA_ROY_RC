@@ -9,13 +9,13 @@ export function LayoutToggle({ activeLayout, setActiveLayout }) {
           class={`layout-btn ${activeLayout === 'split' ? 'active' : ''}`}
           onClick={() => setActiveLayout('split')}
         >
-          📱 Dual-Thumb Split
+          Dual-Thumb Split
         </button>
         <button
           class={`layout-btn ${activeLayout === 'dpad' ? 'active' : ''}`}
           onClick={() => setActiveLayout('dpad')}
         >
-          🎮 Unified D-Pad
+          Unified D-Pad
         </button>
       </div>
     </div>

@@ -172,13 +172,14 @@ export function useBluetooth() {
         if (elapsed >= HEARTBEAT_INTERVAL_MS) {
           const t = currentThrottleRef.current;
           const s = currentSteeringRef.current;
-          if (t !== 'N') {
-            sendSerialChar(t);
-          } else if (s !== 'C') {
-            sendSerialChar(s);
-          } else {
-            sendSerialChar('.');
-          }
+
+          if (t === 'U') sendSerialChar('u');
+          else if (t === 'D') sendSerialChar('d');
+          else sendSerialChar('.');
+
+          if (s === 'L') sendSerialChar('x45\n');
+          else if (s === 'R') sendSerialChar('x135\n');
+          else sendSerialChar('x90\n');
         }
       }
     }, HEARTBEAT_INTERVAL_MS);

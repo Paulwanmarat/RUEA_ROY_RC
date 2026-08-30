@@ -30,8 +30,17 @@ export function useControls({ sendSerialChar, currentThrottleRef, currentSteerin
     setThrottleState(newThrottle);
     setSteeringState(newSteering);
 
-    if (throttleChanged) sendSerialChar(newThrottle);
-    if (steeringChanged) sendSerialChar(newSteering);
+    if (throttleChanged) {
+      if (newThrottle === 'U') sendSerialChar('u');
+      else if (newThrottle === 'D') sendSerialChar('d');
+      else sendSerialChar('n');
+    }
+
+    if (steeringChanged) {
+      if (newSteering === 'L') sendSerialChar('x45\n');
+      else if (newSteering === 'R') sendSerialChar('x135\n');
+      else sendSerialChar('x90\n');
+    }
   }, [currentThrottleRef, currentSteeringRef, sendSerialChar]);
 
   const handleControlPress = useCallback((key) => {
@@ -72,7 +81,8 @@ export function useControls({ sendSerialChar, currentThrottleRef, currentSteerin
 
     triggerHaptic([50, 50, 50]);
     playClickSound(220, 'sawtooth');
-    sendSerialChar('S');
+    sendSerialChar('n');
+    sendSerialChar('x90\n');
   }, [currentSteeringRef, currentThrottleRef, playClickSound, sendSerialChar, triggerHaptic]);
 
   // Keyboard Event Listeners — only active on Controller view

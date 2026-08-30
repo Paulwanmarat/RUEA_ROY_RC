@@ -1,540 +1,304 @@
-import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
 import serial
 import serial.tools.list_ports
 import time
+import json
+import os
 
-# =============================================================================
-# CONFIGURABLE PARAMETERS
-# =============================================================================
-APP_TITLE = "Ruea-Roy RC By SPR41"
-HEARTBEAT_INTERVAL_MS = 250  # 250 ms = 4x margin vs 1000 ms Arduino failsafe
-KEY_RELEASE_DEBOUNCE_MS = 25 # Debounce timer to filter out Windows OS auto-repeat key release events
-
-# =============================================================================
-# RUEA-ROY RC APPLICATION CLASS
-# =============================================================================
-class RueaRoyRCApp:
+class RueaRoyMotorController:
     def __init__(self, root):
         self.root = root
-        self.root.title(APP_TITLE)
-        self.root.geometry("500x650")
+        self.root.title("RUEA-ROY RC Controller")
+        self.root.geometry("400x720")
+        self.root.configure(bg="#1E1E1E")
         self.root.resizable(False, False)
 
-        # Serial Connection State
+        # --- LOAD SAVED SERVO POSITIONS ---
+        self.config_file = "servo_config.json"
+        self.angles = {"LEFT": 45, "CENTER": 90, "RIGHT": 135}
+        self.load_config()
+
         self.serial_port = None
         self.is_connected = False
-        self.port_mapping = {}
-
-        # Control States
-        self.active_keys = set()
-        self.release_timers = {}
         
-        self.current_throttle_cmd = 'N'  # 'U' (Up), 'D' (Down), 'N' (Neutral)
-        self.current_steering_cmd = 'C'  # 'L' (Left), 'R' (Right), 'C' (Center)
-        self.last_sent_cmd = 'S'
-        self.last_cmd_send_time = 0
-
-        # Custom Dark Theme Color Palette
-        self.bg_dark = "#181825"
-        self.card_bg = "#1e1e2e"
-        self.text_main = "#cdd6f4"
-        self.text_sub = "#a6adc8"
-        self.btn_bg = "#313244"
-        self.btn_active = "#45475a"
-        self.btn_highlight = "#89b4fa"
-        self.green_accent = "#a6e3a1"
-        self.red_accent = "#f38ba8"
-        self.yellow_accent = "#f9e2af"
-        self.blue_accent = "#89b4fa"
-
-        self.root.configure(bg=self.bg_dark)
+        self.keys_pressed = set()
+        self.mouse_fwd = False
+        self.mouse_bwd = False
+        self.mouse_left = False
+        self.mouse_right = False
+        self.space_pressed = False
         
-        # Configure Styles
-        self.style = ttk.Style()
-        self.style.theme_use('default')
-        self.style.configure("TCombobox", fieldbackground=self.btn_bg, background=self.btn_bg, foreground=self.text_main)
+        self.current_motor_state = "STOP"
+        self.current_steering_state = "CENTER"
+        self.key_release_jobs = {}
 
-        self._build_ui()
-        self._bind_keyboard_controls()
-        self.refresh_ports()
-
-        # Start periodic Heartbeat & Connection Loop
-        self.root.after(HEARTBEAT_INTERVAL_MS, self._heartbeat_loop)
-
-    # -------------------------------------------------------------------------
-    # USER INTERFACE CONSTRUCTION
-    # -------------------------------------------------------------------------
-    def _build_ui(self):
-        # Header / Title
-        header_frame = tk.Frame(self.root, bg=self.bg_dark, pady=15)
-        header_frame.pack(fill="x")
-
-        title_label = tk.Label(
-            header_frame, 
-            text=APP_TITLE, 
-            font=("Segoe UI", 18, "bold"), 
-            bg=self.bg_dark, 
-            fg=self.blue_accent
-        )
-        title_label.pack()
-
-        sub_label = tk.Label(
-            header_frame, 
-            text="Arduino Nano Bluetooth Controller (HC-06)", 
-            font=("Segoe UI", 9), 
-            bg=self.bg_dark, 
-            fg=self.text_sub
-        )
-        sub_label.pack()
-
-        # Connection Card Frame
-        conn_card = tk.LabelFrame(
-            self.root, 
-            text=" Connection Settings ", 
-            font=("Segoe UI", 10, "bold"),
-            bg=self.card_bg, 
-            fg=self.text_main, 
-            bd=1, 
-            relief="solid", 
-            padx=15, 
-            pady=10
-        )
-        conn_card.pack(fill="x", padx=20, pady=5)
-
-        # Port Selection Row
-        port_row = tk.Frame(conn_card, bg=self.card_bg)
-        port_row.pack(fill="x", pady=5)
-
-        tk.Label(port_row, text="Device:", font=("Segoe UI", 10), bg=self.card_bg, fg=self.text_main).pack(side="left", padx=(0, 10))
-
-        self.port_combobox = ttk.Combobox(port_row, state="readonly", width=25)
-        self.port_combobox.pack(side="left", padx=5)
-
-        self.refresh_btn = tk.Button(
-            port_row, 
-            text="↻ Scan", 
-            command=self.refresh_ports,
-            bg=self.btn_bg, 
-            fg=self.text_main, 
-            activebackground=self.btn_active,
-            activeforeground=self.text_main,
-            font=("Segoe UI", 9), 
-            relief="flat",
-            cursor="hand2"
-        )
-        self.refresh_btn.pack(side="left", padx=5)
-
-        # Action Buttons Row
-        action_row = tk.Frame(conn_card, bg=self.card_bg)
-        action_row.pack(fill="x", pady=10)
-
-        self.connect_btn = tk.Button(
-            action_row, 
-            text="Connect", 
-            command=self.connect_serial, 
-            bg=self.green_accent, 
-            fg="#11111b",
-            font=("Segoe UI", 10, "bold"), 
-            relief="flat", 
-            padx=15, 
-            pady=4,
-            cursor="hand2"
-        )
-        self.connect_btn.pack(side="left", padx=(0, 10))
-
-        self.disconnect_btn = tk.Button(
-            action_row, 
-            text="Disconnect", 
-            command=self.disconnect_serial, 
-            bg=self.btn_bg, 
-            fg=self.text_sub,
-            font=("Segoe UI", 10), 
-            relief="flat", 
-            padx=15, 
-            pady=4, 
-            state="disabled",
-            cursor="hand2"
-        )
-        self.disconnect_btn.pack(side="left")
-
-        # Status Bar Frame
-        status_frame = tk.Frame(conn_card, bg=self.card_bg)
-        status_frame.pack(fill="x", pady=(5, 0))
-
-        tk.Label(status_frame, text="Status:", font=("Segoe UI", 9, "bold"), bg=self.card_bg, fg=self.text_sub).pack(side="left", padx=(0, 5))
+        self.setup_ui()
         
-        self.status_label = tk.Label(
-            status_frame, 
-            text="DISCONNECTED", 
-            font=("Segoe UI", 10, "bold"), 
-            bg=self.card_bg, 
-            fg=self.red_accent
-        )
-        self.status_label.pack(side="left")
+        self.root.bind_all('<KeyPress>', self.on_key_press)
+        self.root.bind_all('<KeyRelease>', self.on_key_release)
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        # Remote Control Frame
-        ctrl_frame = tk.LabelFrame(
-            self.root, 
-            text=" Remote Controls (Hold W / A / S / D or Click) ", 
-            font=("Segoe UI", 10, "bold"),
-            bg=self.card_bg, 
-            fg=self.text_main, 
-            bd=1, 
-            relief="solid", 
-            padx=10, 
-            pady=15
-        )
-        ctrl_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        self.root.after(250, self.heartbeat_loop)
 
-        # Button Grid Layout
-        grid_container = tk.Frame(ctrl_frame, bg=self.card_bg)
-        grid_container.pack(expand=True)
-
-        # UP Button (W)
-        self.btn_up = tk.Button(
-            grid_container, 
-            text="▲\nUP (W)", 
-            font=("Segoe UI", 11, "bold"),
-            bg=self.btn_bg, 
-            fg=self.text_main,
-            activebackground=self.blue_accent,
-            activeforeground="#11111b",
-            width=10, 
-            height=2,
-            relief="raised", 
-            cursor="hand2"
-        )
-        self.btn_up.grid(row=0, column=1, pady=6, padx=6)
-        self._bind_mouse_button(self.btn_up, 'w')
-
-        # LEFT Button (A)
-        self.btn_left = tk.Button(
-            grid_container, 
-            text="◄ LEFT (A)", 
-            font=("Segoe UI", 11, "bold"),
-            bg=self.btn_bg, 
-            fg=self.text_main,
-            activebackground=self.blue_accent,
-            activeforeground="#11111b",
-            width=12, 
-            height=2,
-            relief="raised", 
-            cursor="hand2"
-        )
-        self.btn_left.grid(row=1, column=0, pady=6, padx=6)
-        self._bind_mouse_button(self.btn_left, 'a')
-
-        # RIGHT Button (D)
-        self.btn_right = tk.Button(
-            grid_container, 
-            text="RIGHT (D) ►", 
-            font=("Segoe UI", 11, "bold"),
-            bg=self.btn_bg, 
-            fg=self.text_main,
-            activebackground=self.blue_accent,
-            activeforeground="#11111b",
-            width=12, 
-            height=2,
-            relief="raised", 
-            cursor="hand2"
-        )
-        self.btn_right.grid(row=1, column=2, pady=6, padx=6)
-        self._bind_mouse_button(self.btn_right, 'd')
-
-        # DOWN Button (S)
-        self.btn_down = tk.Button(
-            grid_container, 
-            text="▼\nDOWN (S)", 
-            font=("Segoe UI", 11, "bold"),
-            bg=self.btn_bg, 
-            fg=self.text_main,
-            activebackground=self.blue_accent,
-            activeforeground="#11111b",
-            width=10, 
-            height=2,
-            relief="raised", 
-            cursor="hand2"
-        )
-        self.btn_down.grid(row=2, column=1, pady=6, padx=6)
-        self._bind_mouse_button(self.btn_down, 's')
-
-        # STOP Button (Space)
-        self.btn_stop = tk.Button(
-            grid_container, 
-            text="🛑 EMERGENCY STOP (Space)", 
-            font=("Segoe UI", 13, "bold"),
-            bg=self.red_accent, 
-            fg="#11111b",
-            activebackground="#ff5555",
-            activeforeground="#ffffff",
-            width=26, 
-            height=2,
-            relief="raised", 
-            cursor="hand2",
-            command=self.trigger_emergency_stop
-        )
-        self.btn_stop.grid(row=3, column=0, columnspan=3, pady=(15, 5), padx=6)
-
-        # Command & Status Display Frame
-        log_frame = tk.Frame(self.root, bg=self.bg_dark, pady=10)
-        log_frame.pack(fill="x", padx=20)
-
-        tk.Label(log_frame, text="Active State:", font=("Segoe UI", 9), bg=self.bg_dark, fg=self.text_sub).pack(side="left")
-        self.cmd_display = tk.Label(log_frame, text="[ STOP (S) ]", font=("Segoe UI", 10, "bold"), bg=self.bg_dark, fg=self.blue_accent)
-        self.cmd_display.pack(side="left", padx=5)
-
-    # -------------------------------------------------------------------------
-    # KEYBOARD & MOUSE EVENT HANDLING
-    # -------------------------------------------------------------------------
-    def _bind_mouse_button(self, btn_widget, key_name):
-        btn_widget.bind("<ButtonPress-1>", lambda e: self._on_key_press_action(key_name))
-        btn_widget.bind("<ButtonRelease-1>", lambda e: self._on_key_release_action(key_name))
-
-    def _bind_keyboard_controls(self):
-        self.root.bind("<KeyPress>", self._handle_key_press)
-        self.root.bind("<KeyRelease>", self._handle_key_release)
-
-    def _handle_key_press(self, event):
-        key = event.keysym.lower()
-        if key == 'space':
-            self.trigger_emergency_stop()
-            return
-
-        if key in ('w', 'a', 's', 'd'):
-            # Filter out Windows OS key auto-repeat flickering
-            if key in self.release_timers:
-                self.root.after_cancel(self.release_timers[key])
-                del self.release_timers[key]
-
-            if key not in self.active_keys:
-                self.active_keys.add(key)
-                self._evaluate_controls()
-
-    def _handle_key_release(self, event):
-        key = event.keysym.lower()
-        if key in ('w', 'a', 's', 'd'):
-            if key in self.release_timers:
-                self.root.after_cancel(self.release_timers[key])
-
-            self.release_timers[key] = self.root.after(
-                KEY_RELEASE_DEBOUNCE_MS, 
-                lambda k=key: self._real_key_release(k)
-            )
-
-    def _real_key_release(self, key):
-        if key in self.release_timers:
-            del self.release_timers[key]
-
-        if key in self.active_keys:
-            self.active_keys.remove(key)
-            self._evaluate_controls()
-
-    def _on_key_press_action(self, key):
-        self.active_keys.add(key)
-        self._evaluate_controls()
-
-    def _on_key_release_action(self, key):
-        if key in self.active_keys:
-            self.active_keys.remove(key)
-            self._evaluate_controls()
-
-    def trigger_emergency_stop(self):
-        self.active_keys.clear()
-        self.current_throttle_cmd = 'N'
-        self.current_steering_cmd = 'C'
-        self.update_button_visuals()
-        self.send_serial_char('S')
-
-    # -------------------------------------------------------------------------
-    # CONTROL EVALUATION & VISUAL UPDATES
-    # -------------------------------------------------------------------------
-    def _evaluate_controls(self):
-        # 1. Determine Throttle State
-        if 'w' in self.active_keys and 's' not in self.active_keys:
-            new_throttle = 'U'
-        elif 's' in self.active_keys and 'w' not in self.active_keys:
-            new_throttle = 'D'
-        else:
-            new_throttle = 'N'
-
-        # 2. Determine Steering State
-        if 'a' in self.active_keys and 'd' not in self.active_keys:
-            new_steering = 'L'
-        elif 'd' in self.active_keys and 'a' not in self.active_keys:
-            new_steering = 'R'
-        else:
-            new_steering = 'C'
-
-        throttle_changed = (new_throttle != self.current_throttle_cmd)
-        steering_changed = (new_steering != self.current_steering_cmd)
-
-        self.current_throttle_cmd = new_throttle
-        self.current_steering_cmd = new_steering
-
-        self.update_button_visuals()
-
-        # Transmit updated commands immediately
-        if throttle_changed:
-            self.send_serial_char(self.current_throttle_cmd)
-        if steering_changed:
-            self.send_serial_char(self.current_steering_cmd)
-
-        # If both are neutral/centered and last action was movement, ensure safe state is shown
-        if new_throttle == 'N' and new_steering == 'C':
-            self.cmd_display.config(text="[ STOP / NEUTRAL ]", fg=self.blue_accent)
-
-    def update_button_visuals(self):
-        # Highlight UP (W)
-        if 'w' in self.active_keys:
-            self.btn_up.config(bg=self.btn_highlight, fg="#11111b", relief="sunken")
-        else:
-            self.btn_up.config(bg=self.btn_bg, fg=self.text_main, relief="raised")
-
-        # Highlight DOWN (S)
-        if 's' in self.active_keys:
-            self.btn_down.config(bg=self.btn_highlight, fg="#11111b", relief="sunken")
-        else:
-            self.btn_down.config(bg=self.btn_bg, fg=self.text_main, relief="raised")
-
-        # Highlight LEFT (A)
-        if 'a' in self.active_keys:
-            self.btn_left.config(bg=self.btn_highlight, fg="#11111b", relief="sunken")
-        else:
-            self.btn_left.config(bg=self.btn_bg, fg=self.text_main, relief="raised")
-
-        # Highlight RIGHT (D)
-        if 'd' in self.active_keys:
-            self.btn_right.config(bg=self.btn_highlight, fg="#11111b", relief="sunken")
-        else:
-            self.btn_right.config(bg=self.btn_bg, fg=self.text_main, relief="raised")
-
-    # -------------------------------------------------------------------------
-    # SERIAL COMMUNICATION ENGINE & HEARTBEAT
-    # -------------------------------------------------------------------------
-    def refresh_ports(self):
-        ports = serial.tools.list_ports.comports()
-        self.port_mapping.clear()
-        
-        for p in ports:
-            hwid = str(p.hwid).upper()
-            desc = str(p.description).upper()
-            name = str(p.name).upper()
-            
-            if "BTHENUM" in hwid or "BLUETOOTH" in desc or "HC-06" in name or "HC-06" in desc:
-                display_name = f"🔵 {p.device} (Bluetooth HC-06)"
-            else:
-                display_name = f"🔌 {p.device} (USB/Other)"
-                
-            self.port_mapping[display_name] = p.device
-
-        port_labels = list(self.port_mapping.keys())
-        port_labels.sort(key=lambda x: "🔵" not in x)
-
-        self.port_combobox['values'] = port_labels
-        if port_labels:
-            self.port_combobox.current(0)
-        else:
-            self.port_combobox.set("No Devices Found")
-
-    def connect_serial(self):
-        selected_label = self.port_combobox.get()
-        if not selected_label or selected_label == "No Devices Found":
-            messagebox.showwarning("Connection Warning", "Please select a valid device.")
-            return
-
-        actual_port = self.port_mapping.get(selected_label)
-
-        try:
-            self.serial_port = serial.Serial(
-                port=actual_port,
-                baudrate=9600,
-                timeout=1,
-                write_timeout=0  # Prevents GUI freezing if Bluetooth connection drops
-            )
-            self.is_connected = True
-            self.status_label.config(text=f"CONNECTED ({actual_port})", fg=self.green_accent)
-            self.connect_btn.config(state="disabled", bg=self.btn_bg, fg=self.text_sub)
-            self.disconnect_btn.config(state="normal", bg=self.red_accent, fg="#11111b")
-            self.port_combobox.config(state="disabled")
-            self.refresh_btn.config(state="disabled")
-
-            # Send initial stop command to synchronize state
-            self.send_serial_char('S')
-
-        except Exception as e:
-            self.is_connected = False
-            self.status_label.config(text="DISCONNECTED", fg=self.red_accent)
-            messagebox.showerror("Connection Error", f"Failed to connect to Bluetooth device:\n{str(e)}")
-
-    def disconnect_serial(self):
-        if self.is_connected and self.serial_port and self.serial_port.is_open:
+    # --- CONFIGURATION SAVE/LOAD ---
+    def load_config(self):
+        if os.path.exists(self.config_file):
             try:
-                # Attempt to send emergency stop before disconnecting
-                self.serial_port.write(b'S')
-                self.serial_port.flush()
-                self.serial_port.close()
+                with open(self.config_file, "r") as f:
+                    self.angles.update(json.load(f))
             except Exception:
                 pass
 
-        self.is_connected = False
-        self.serial_port = None
-        self.active_keys.clear()
-        self.status_label.config(text="DISCONNECTED", fg=self.red_accent)
-        self.connect_btn.config(state="normal", bg=self.green_accent, fg="#11111b")
-        self.disconnect_btn.config(state="disabled", bg=self.btn_bg, fg=self.text_sub)
-        self.port_combobox.config(state="readonly")
-        self.refresh_btn.config(state="normal")
-        self.cmd_display.config(text="[ DISCONNECTED ]", fg=self.text_sub)
-        self.update_button_visuals()
+    def save_config(self):
+        with open(self.config_file, "w") as f:
+            json.dump(self.angles, f)
 
-    def send_serial_char(self, char_cmd):
-        if not self.is_connected or not self.serial_port or not self.serial_port.is_open:
-            self.cmd_display.config(text="Failed (Disconnected)", fg=self.red_accent)
+    def setup_ui(self):
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        tk.Label(self.root, text="🚤 RUEA-ROY RC", font=("Arial", 18, "bold"), bg="#1E1E1E", fg="#FFFFFF").pack(pady=(10, 2))
+        
+        conn_frame = tk.Frame(self.root, bg="#2E2E2E", padx=10, pady=10)
+        conn_frame.pack(fill="x", padx=15, pady=2)
+        
+        row_frame = tk.Frame(conn_frame, bg="#2E2E2E")
+        row_frame.pack(fill="x")
+        
+        self.port_combo = ttk.Combobox(row_frame, state="readonly", width=8)
+        self.port_combo.pack(side="left", padx=(0, 5))
+        self.scan_ports()
+        
+        tk.Button(row_frame, text="Scan", command=self.scan_ports, bg="#444444", fg="#FFFFFF", relief="flat", width=5).pack(side="left", padx=(0, 5))
+        self.btn_connect = tk.Button(row_frame, text="Connect", command=self.connect, bg="#2E7D32", fg="#FFFFFF", relief="flat", width=7)
+        self.btn_connect.pack(side="left", padx=(0, 5))
+        
+        self.btn_disconnect = tk.Button(row_frame, text="Disconnect", command=self.disconnect, bg="#C62828", fg="#FFFFFF", relief="flat", width=9, state=tk.DISABLED)
+        self.btn_disconnect.pack(side="left")
+
+        ctrl_frame = tk.Frame(self.root, bg="#1E1E1E")
+        ctrl_frame.pack(fill="both", expand=True, padx=15, pady=10)
+        
+        steer_frame = tk.Frame(ctrl_frame, bg="#1E1E1E")
+        steer_frame.pack(fill="x", pady=2)
+        
+        self.btn_left = tk.Button(steer_frame, text="◄ LEFT", font=("Arial", 10, "bold"), bg="#444444", fg="#FFFFFF", height=2, relief="flat")
+        self.btn_left.pack(side="left", expand=True, fill="x", padx=(0, 3))
+        self.btn_left.bind('<ButtonPress-1>', lambda e: self.on_mouse_steering('left', True, self.btn_left))
+        self.btn_left.bind('<ButtonRelease-1>', lambda e: self.on_mouse_steering('left', False, self.btn_left))
+
+        self.btn_right = tk.Button(steer_frame, text="RIGHT ►", font=("Arial", 10, "bold"), bg="#444444", fg="#FFFFFF", height=2, relief="flat")
+        self.btn_right.pack(side="right", expand=True, fill="x", padx=(3, 0))
+        self.btn_right.bind('<ButtonPress-1>', lambda e: self.on_mouse_steering('right', True, self.btn_right))
+        self.btn_right.bind('<ButtonRelease-1>', lambda e: self.on_mouse_steering('right', False, self.btn_right))
+
+        self.btn_fwd = tk.Button(ctrl_frame, text="▲ FORWARD", font=("Arial", 11, "bold"), bg="#444444", fg="#FFFFFF", height=2, relief="flat")
+        self.btn_fwd.pack(fill="x", pady=4)
+        self.btn_fwd.bind('<ButtonPress-1>', lambda e: self.on_mouse_motor('fwd', True, self.btn_fwd))
+        self.btn_fwd.bind('<ButtonRelease-1>', lambda e: self.on_mouse_motor('fwd', False, self.btn_fwd))
+
+        self.btn_bwd = tk.Button(ctrl_frame, text="▼ BACKWARD", font=("Arial", 11, "bold"), bg="#444444", fg="#FFFFFF", height=2, relief="flat")
+        self.btn_bwd.pack(fill="x", pady=4)
+        self.btn_bwd.bind('<ButtonPress-1>', lambda e: self.on_mouse_motor('bwd', True, self.btn_bwd))
+        self.btn_bwd.bind('<ButtonRelease-1>', lambda e: self.on_mouse_motor('bwd', False, self.btn_bwd))
+
+        self.btn_stop = tk.Button(ctrl_frame, text="🛑 STOP", font=("Arial", 12, "bold"), bg="#B71C1C", fg="#FFFFFF", height=2, relief="flat")
+        self.btn_stop.pack(fill="x", pady=8)
+        self.btn_stop.bind('<ButtonPress-1>', lambda e: self.on_mouse_motor('stop', True, self.btn_stop))
+        self.btn_stop.bind('<ButtonRelease-1>', lambda e: self.on_mouse_motor('stop', False, self.btn_stop))
+
+        # CALIBRATION BUTTON
+        self.btn_calib = tk.Button(ctrl_frame, text="⚙️ Calibrate Steering Positions", font=("Arial", 9), bg="#4A148C", fg="white", command=self.open_calibration, relief="flat", pady=5)
+        self.btn_calib.pack(fill="x", pady=(15,0))
+
+        self.status_lbl = tk.Label(self.root, text="Status: [ DISCONNECTED ]", font=("Arial", 10, "bold"), bg="#1E1E1E", fg="#FF9800", pady=5)
+        self.status_lbl.pack(side="bottom", pady=5)
+
+    # --- CALIBRATION WINDOW ---
+    def open_calibration(self):
+        calib_win = tk.Toplevel(self.root)
+        calib_win.title("Steering Calibration")
+        calib_win.geometry("300x320")
+        calib_win.configure(bg="#2E2E2E")
+        calib_win.transient(self.root) # Keeps window on top
+        
+        tk.Label(calib_win, text="Drag sliders to tune. Updates in real-time.", bg="#2E2E2E", fg="#AAAAAA").pack(pady=10)
+        
+        def live_test(val):
+            self.send_serial(f"x{val}\n")
+
+        tk.Label(calib_win, text="LEFT Angle", bg="#2E2E2E", fg="white", font=("Arial", 9, "bold")).pack()
+        left_scale = tk.Scale(calib_win, from_=0, to_=180, orient="horizontal", bg="#2E2E2E", fg="white", length=220, command=live_test, highlightthickness=0)
+        left_scale.set(self.angles["LEFT"])
+        left_scale.pack(pady=(0, 5))
+        
+        tk.Label(calib_win, text="CENTER Angle", bg="#2E2E2E", fg="white", font=("Arial", 9, "bold")).pack()
+        center_scale = tk.Scale(calib_win, from_=0, to_=180, orient="horizontal", bg="#2E2E2E", fg="white", length=220, command=live_test, highlightthickness=0)
+        center_scale.set(self.angles["CENTER"])
+        center_scale.pack(pady=(0, 5))
+        
+        tk.Label(calib_win, text="RIGHT Angle", bg="#2E2E2E", fg="white", font=("Arial", 9, "bold")).pack()
+        right_scale = tk.Scale(calib_win, from_=0, to_=180, orient="horizontal", bg="#2E2E2E", fg="white", length=220, command=live_test, highlightthickness=0)
+        right_scale.set(self.angles["RIGHT"])
+        right_scale.pack(pady=(0, 15))
+        
+        def save_and_close():
+            self.angles["LEFT"] = int(left_scale.get())
+            self.angles["CENTER"] = int(center_scale.get())
+            self.angles["RIGHT"] = int(right_scale.get())
+            self.save_config()
+            
+            # Tell Arduino what the new safe Center is
+            self.send_serial(f"c{self.angles['CENTER']}\n")
+            self.send_serial(f"x{self.angles['CENTER']}\n")
+            calib_win.destroy()
+            
+        tk.Button(calib_win, text="Save & Close", bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), command=save_and_close, relief="flat", width=15).pack()
+
+    # --- INPUT EVENT HANDLERS ---
+    def on_key_press(self, event):
+        sym = event.keysym.lower()
+        if sym not in ['w', 's', 'a', 'd', 'up', 'down', 'left', 'right', 'space']: return
+        
+        if sym in self.key_release_jobs:
+            self.root.after_cancel(self.key_release_jobs[sym])
+            del self.key_release_jobs[sym]
+
+        if sym == "space": self.space_pressed = True
+        else: self.keys_pressed.add(sym)
+        self.resolve_states()
+        return "break"
+
+    def on_key_release(self, event):
+        sym = event.keysym.lower()
+        if sym not in ['w', 's', 'a', 'd', 'up', 'down', 'left', 'right', 'space']: return
+        job = self.root.after(50, lambda: self.execute_key_release(sym))
+        self.key_release_jobs[sym] = job
+        return "break"
+
+    def execute_key_release(self, sym):
+        if sym in self.key_release_jobs: del self.key_release_jobs[sym]
+        if sym == "space": self.space_pressed = False
+        else: self.keys_pressed.discard(sym)
+        self.resolve_states()
+
+    def on_mouse_motor(self, btn, is_pressed, widget):
+        if btn == 'fwd': self.mouse_fwd = is_pressed
+        elif btn == 'bwd': self.mouse_bwd = is_pressed
+        elif btn == 'stop': self.space_pressed = is_pressed
+        self.resolve_states()
+
+    def on_mouse_steering(self, side, is_pressed, widget):
+        if side == 'left': self.mouse_left = is_pressed
+        elif side == 'right': self.mouse_right = is_pressed
+        self.resolve_states()
+
+    def resolve_states(self):
+        fwd_intent = ('w' in self.keys_pressed) or ('up' in self.keys_pressed) or self.mouse_fwd
+        bwd_intent = ('s' in self.keys_pressed) or ('down' in self.keys_pressed) or self.mouse_bwd
+        if self.space_pressed or (fwd_intent and bwd_intent): new_motor = "STOP"
+        elif fwd_intent: new_motor = "FORWARD"
+        elif bwd_intent: new_motor = "BACKWARD"
+        else: new_motor = "STOP"
+
+        left_intent = ('a' in self.keys_pressed) or ('left' in self.keys_pressed) or self.mouse_left
+        right_intent = ('d' in self.keys_pressed) or ('right' in self.keys_pressed) or self.mouse_right
+        if left_intent and right_intent: new_steer = "CENTER"
+        elif left_intent: new_steer = "LEFT"
+        elif right_intent: new_steer = "RIGHT"
+        else: new_steer = "CENTER"
+
+        if new_motor != self.current_motor_state or new_steer != self.current_steering_state:
+            self.current_motor_state = new_motor
+            self.current_steering_state = new_steer
+            self.update_gui_visuals()
+            self.send_state_commands()
+
+    def send_state_commands(self):
+        if self.current_motor_state == "FORWARD": self.send_serial("u")
+        elif self.current_motor_state == "BACKWARD": self.send_serial("d")
+        elif self.current_motor_state == "STOP": self.send_serial("n")
+
+        self.send_serial(f"x{self.angles[self.current_steering_state]}\n")
+
+    def heartbeat_loop(self):
+        if self.is_connected:
+            if self.current_motor_state == "FORWARD": self.send_serial("u")
+            elif self.current_motor_state == "BACKWARD": self.send_serial("d")
+            elif self.current_motor_state == "STOP": self.send_serial(".")
+            self.send_serial(f"x{self.angles[self.current_steering_state]}\n")
+            
+        self.root.after(250, self.heartbeat_loop)
+
+    def send_serial(self, cmd):
+        if self.is_connected and self.serial_port and self.serial_port.is_open:
+            try:
+                self.serial_port.write(cmd.encode())
+            except serial.SerialException:
+                self.disconnect(error=True)
+
+    def scan_ports(self):
+        ports = [port.device for port in serial.tools.list_ports.comports()]
+        self.port_combo['values'] = ports
+        if ports: self.port_combo.current(0)
+
+    def connect(self):
+        port = self.port_combo.get()
+        if not port: return
+        try:
+            self.serial_port = serial.Serial(port, 9600, timeout=1)
+            time.sleep(2)
+            self.is_connected = True
+            self.keys_pressed.clear()
+            self.current_motor_state = "STOP"
+            self.current_steering_state = "CENTER"
+            
+            # Send initial stop and setup failsafe center
+            self.send_serial("n")
+            self.send_serial(f"c{self.angles['CENTER']}\n")
+            self.send_serial(f"x{self.angles['CENTER']}\n")
+            
+            self.btn_connect.config(state=tk.DISABLED)
+            self.btn_disconnect.config(state=tk.NORMAL)
+            self.update_gui_visuals()
+        except Exception as e:
+            messagebox.showerror("Connection Error", str(e))
+
+    def disconnect(self, error=False):
+        if self.is_connected:
+            self.send_serial("n")
+            self.send_serial(f"x{self.angles['CENTER']}\n")
+            if self.serial_port:
+                try:
+                    time.sleep(0.1)
+                    self.serial_port.close()
+                except: pass
+        self.is_connected = False
+        self.btn_connect.config(state=tk.NORMAL)
+        self.btn_disconnect.config(state=tk.DISABLED)
+        self.update_gui_visuals()
+
+    def update_gui_visuals(self):
+        if not self.is_connected:
+            self.status_lbl.config(text="Status: [ DISCONNECTED ]", fg="#FF9800")
             return
 
-        try:
-            self.serial_port.write(char_cmd.encode('ascii'))
-            self.last_sent_cmd = char_cmd
-            self.last_cmd_send_time = time.time()
-            self.cmd_display.config(text=f"'{char_cmd}' Sent", fg=self.green_accent)
-        except serial.SerialException as e:
-            # Handle unexpected Bluetooth drop or hardware disconnect gracefully
-            self.is_connected = False
-            self.status_label.config(text="CONNECTION LOST", fg=self.yellow_accent)
-            self.cmd_display.config(text="Connection Lost!", fg=self.red_accent)
-            self.disconnect_serial()
-            messagebox.showerror("Serial Error", f"Bluetooth connection was lost:\n{str(e)}")
+        self.btn_fwd.config(bg="#4CAF50" if self.current_motor_state == "FORWARD" else "#444444")
+        self.btn_bwd.config(bg="#2196F3" if self.current_motor_state == "BACKWARD" else "#444444")
+        self.btn_left.config(bg="#FF9800" if self.current_steering_state == "LEFT" else "#444444")
+        self.btn_right.config(bg="#FF9800" if self.current_steering_state == "RIGHT" else "#444444")
 
-    def _heartbeat_loop(self):
-        """
-        Runs every HEARTBEAT_INTERVAL_MS (250 ms) to keep Arduino failsafe timer alive.
-        If no user command was sent recently, re-transmits active state or heartbeat character.
-        """
-        if self.is_connected and self.serial_port and self.serial_port.is_open:
-            elapsed_ms = (time.time() - self.last_cmd_send_time) * 1000.0
-            if elapsed_ms >= HEARTBEAT_INTERVAL_MS:
-                # Transmit active state or heartbeat tick
-                if self.current_throttle_cmd != 'N':
-                    self.send_serial_char(self.current_throttle_cmd)
-                elif self.current_steering_cmd != 'C':
-                    self.send_serial_char(self.current_steering_cmd)
-                else:
-                    self.send_serial_char('.') # Heartbeat tick
+        self.status_lbl.config(
+            text=f"Motor: [ {self.current_motor_state} ] | Steering: [ {self.current_steering_state} ]",
+            fg="#4CAF50" if self.current_motor_state != "STOP" else "#F44336"
+        )
 
-        # Re-schedule heartbeat timer
-        self.root.after(HEARTBEAT_INTERVAL_MS, self._heartbeat_loop)
-
-    def on_closing(self):
-        self.disconnect_serial()
+    def on_close(self):
+        self.disconnect()
         self.root.destroy()
 
-# =============================================================================
-# MAIN ENTRY POINT
-# =============================================================================
 if __name__ == "__main__":
     root = tk.Tk()
-    app = RueaRoyRCApp(root)
-    root.protocol("WM_DELETE_WINDOW", app.on_closing)
+    app = RueaRoyMotorController(root)
     root.mainloop()

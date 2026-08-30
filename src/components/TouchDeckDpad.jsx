@@ -32,7 +32,7 @@ export function TouchDeckDpad({ activeKeys, onPress, onRelease, onEstop }) {
           </button>
           
           <div class="dpad-center-hub">
-            <span class="hub-logo">🚤</span>
+            <span class="hub-logo">RC</span>
           </div>
 
           <button

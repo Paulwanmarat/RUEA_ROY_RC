@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useHapticsAudio } from './hooks/useHapticsAudio';
 import { useBluetooth } from './hooks/useBluetooth';
 import { useControls } from './hooks/useControls';
+import { useTheme } from './hooks/useTheme';
 
 // Page Components
 import { HomePage } from './components/HomePage';
@@ -13,6 +14,7 @@ import { LayoutToggle } from './components/LayoutToggle';
 import { TouchDeckSplit } from './components/TouchDeckSplit';
 import { TouchDeckDpad } from './components/TouchDeckDpad';
 import { SettingsCard } from './components/SettingsCard';
+import { TeamPage } from './components/TeamPage';
 
 // Resources Components
 import { ResourcesHeader } from './components/ResourcesHeader';
@@ -25,9 +27,12 @@ import { ResourceViewerModal } from './components/ResourceViewerModal';
 import { RESOURCES_DATA } from './data/resourcesData';
 
 export default function App() {
-  // Navigation & View State ('home' | 'controller' | 'resources')
+  // Navigation & View State ('home' | 'controller' | 'resources' | 'team')
   const [activeView, setActiveView] = useState('home');
   const [activeLayout, setActiveLayout] = useState('split'); // 'split' | 'dpad'
+
+  // Theme State ('light' | 'dark' | 'system')
+  const { themeMode, setThemeMode } = useTheme();
 
   // Resources State
   const [searchQuery, setSearchQuery] = useState('');
@@ -103,9 +108,14 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${activeView === 'home' ? 'view-home-no-scroll' : ''}`}>
       {/* Top View Router Navigation */}
-      <Navigation activeView={activeView} setActiveView={setActiveView} />
+      <Navigation
+        activeView={activeView}
+        setActiveView={setActiveView}
+        themeMode={themeMode}
+        setThemeMode={setThemeMode}
+      />
 
       {/* Main Content Area */}
       <main className="main-content">
@@ -151,6 +161,8 @@ export default function App() {
                   setHapticsEnabled={setHapticsEnabled}
                   audioEnabled={audioEnabled}
                   setAudioEnabled={setAudioEnabled}
+                  themeMode={themeMode}
+                  setThemeMode={setThemeMode}
                 />
               </div>
 
@@ -178,7 +190,7 @@ export default function App() {
               </div>
             </div>
           </>
-        ) : (
+        ) : activeView === 'resources' ? (
           /* ===================================================================
              VIEW 2: RESOURCES & TECHNICAL DOCUMENTATION HUB
              =================================================================== */
@@ -211,6 +223,11 @@ export default function App() {
               onViewDocumentation={handleViewDocumentationClick}
             />
           </>
+        ) : (
+          /* ===================================================================
+             VIEW 3: DEVELOPMENT TEAM MEMBERS
+             =================================================================== */
+          <TeamPage />
         )}
       </main>
 
@@ -222,10 +239,12 @@ export default function App() {
         />
       )}
 
-      {/* App Footer */}
-      <footer className="app-footer">
-        <p>Ruea-Roy RC Platform By SPR41 &bull; React Web & Resources Hub</p>
-      </footer>
+      {/* App Footer (Hidden on Home Page) */}
+      {activeView !== 'home' && (
+        <footer className="app-footer">
+          <p>Ruea-Roy RC Platform By SPR41 &bull; React Web & Resources Hub</p>
+        </footer>
+      )}
     </div>
   );
 }
