@@ -1,0 +1,679 @@
+/* =============================================================================
+   RUEY ROY RC - MOBILE PWA DESIGN SYSTEM
+   Palette inspired by official logo: Cyan, Sky Blue, Dark Slate, Neon Accents
+   ============================================================================= */
+
+:root {
+  --bg-main: #0b0f19;
+  --bg-card: rgba(17, 24, 39, 0.85);
+  --bg-card-border: rgba(56, 189, 248, 0.2);
+  --text-main: #f1f5f9;
+  --text-sub: #94a3b8;
+  
+  /* Brand Accent Colors */
+  --sky-blue: #38bdf8;
+  --sky-blue-glow: rgba(56, 189, 248, 0.5);
+  --cyan-accent: #00f2fe;
+  --green-accent: #10b981;
+  --red-accent: #f43f5e;
+  --red-glow: rgba(244, 63, 94, 0.6);
+  --yellow-accent: #f59e0b;
+  
+  /* Button States */
+  --btn-bg: #1e293b;
+  --btn-active: #0284c7;
+  --btn-border: #334155;
+
+  --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Reset & Global Mobile Rules */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: var(--font-body);
+  overflow-x: hidden;
+  touch-action: manipulation;
+}
+
+/* Main Container */
+.app-container {
+  max-width: 540px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0b0f19 80%);
+}
+
+/* Header & Logo */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--bg-card-border);
+  border-radius: 18px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-wrapper {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  padding: 2px;
+  background: linear-gradient(135deg, #38bdf8, #00f2fe, #0284c7);
+  box-shadow: 0 0 15px var(--sky-blue-glow);
+}
+
+.brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.logo-star {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  font-size: 14px;
+  animation: starPulse 2s infinite ease-in-out;
+}
+
+@keyframes starPulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.3); opacity: 1; filter: drop-shadow(0 0 6px #fff); }
+}
+
+.title-meta .brand-title {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  background: linear-gradient(90deg, #ffffff, var(--sky-blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.title-meta .brand-subtitle {
+  font-size: 0.72rem;
+  color: var(--text-sub);
+}
+
+/* Status Badge */
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  transition: all 0.3s ease;
+}
+
+.status-badge.disconnected {
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--red-accent);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.status-badge.connected {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--green-accent);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-badge.connected .status-dot {
+  animation: blinkFast 1.2s infinite;
+}
+
+@keyframes blinkFast {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Generic Card Container */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--bg-card-border);
+  border-radius: 18px;
+  padding: 14px 16px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Connection Card & Tabs */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.card-header h2 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sky-blue);
+}
+
+.mode-tabs {
+  display: flex;
+  background: #0f172a;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--btn-border);
+}
+
+.tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-sub);
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+  background: var(--sky-blue);
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+.action-buttons-row {
+  display: flex;
+  gap: 10px;
+}
+
+.btn {
+  flex: 1;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 12px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--sky-blue), var(--btn-active));
+  color: #0b0f19;
+}
+
+.btn-primary.glow-cyan {
+  box-shadow: 0 0 16px var(--sky-blue-glow);
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
+}
+
+.btn-danger {
+  background: #334155;
+  color: var(--text-sub);
+}
+
+.btn-danger:not([disabled]) {
+  background: var(--red-accent);
+  color: #ffffff;
+  box-shadow: 0 0 16px var(--red-glow);
+}
+
+.btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hint-text {
+  font-size: 0.72rem;
+  color: var(--text-sub);
+  margin-top: 8px;
+  text-align: center;
+}
+
+.bridge-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.bridge-input-group input {
+  flex: 1;
+  background: #0f172a;
+  border: 1px solid var(--btn-border);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+}
+
+/* Telemetry Grid */
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  text-align: center;
+}
+
+.telemetry-item {
+  background: rgba(15, 23, 42, 0.6);
+  padding: 8px 6px;
+  border-radius: 12px;
+  border: 1px solid var(--btn-border);
+}
+
+.tel-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-sub);
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.tel-value {
+  font-family: var(--font-heading);
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--sky-blue);
+}
+
+.tel-value.state-active {
+  color: var(--cyan-accent);
+  text-shadow: 0 0 10px var(--cyan-accent);
+}
+
+.heartbeat-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.pulse-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green-accent);
+  box-shadow: 0 0 8px var(--green-accent);
+  transition: transform 0.15s ease;
+}
+
+.pulse-indicator.tick {
+  transform: scale(1.6);
+  background: #fff;
+}
+
+.tel-subtext {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--green-accent);
+}
+
+/* Layout Switcher */
+.controller-layout-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.layout-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-sub);
+}
+
+.layout-toggle-group {
+  display: flex;
+  gap: 6px;
+}
+
+.layout-btn {
+  background: #1e293b;
+  border: 1px solid var(--btn-border);
+  color: var(--text-sub);
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.layout-btn.active {
+  background: var(--btn-active);
+  color: #fff;
+  border-color: var(--sky-blue);
+  box-shadow: 0 0 10px var(--sky-blue-glow);
+}
+
+/* Touch Deck Layouts */
+.touch-deck {
+  display: none;
+  touch-action: none;
+}
+
+.touch-deck.active {
+  display: flex;
+}
+
+/* Layout A: Dual-Thumb Split Deck */
+.split-deck {
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.control-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.throttle-column, .steering-column {
+  flex: 1;
+}
+
+.deck-title {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--text-sub);
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.control-btn {
+  background: linear-gradient(180deg, #1e293b, #0f172a);
+  border: 2px solid var(--btn-border);
+  border-radius: 16px;
+  color: var(--text-main);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  touch-action: none;
+  transition: all 0.1s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.btn-throttle {
+  height: 100px;
+}
+
+.btn-steering {
+  height: 100px;
+}
+
+.control-btn .arrow {
+  font-size: 1.5rem;
+  color: var(--sky-blue);
+  transition: transform 0.1s ease;
+}
+
+.control-btn .label {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.control-btn .key-hint {
+  font-size: 0.65rem;
+  color: var(--text-sub);
+  background: rgba(255,255,255,0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Active Touch State styling */
+.control-btn.active-press {
+  background: linear-gradient(180deg, var(--sky-blue), #0284c7);
+  border-color: #00f2fe;
+  color: #0b0f19;
+  transform: scale(0.95);
+  box-shadow: 0 0 25px var(--cyan-accent);
+}
+
+.control-btn.active-press .arrow,
+.control-btn.active-press .key-hint {
+  color: #0b0f19;
+}
+
+/* Center Emergency Stop Button */
+.center-column {
+  width: 90px;
+  justify-content: center;
+}
+
+.btn-estop {
+  background: linear-gradient(180deg, #f43f5e, #be123c);
+  border: 2px solid #fda4af;
+  border-radius: 18px;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 8px;
+  height: 100%;
+  min-height: 210px;
+  cursor: pointer;
+  touch-action: none;
+  transition: all 0.1s ease;
+}
+
+.btn-estop.glow-red {
+  box-shadow: 0 0 20px var(--red-glow);
+}
+
+.btn-estop:active, .btn-estop.active-press {
+  transform: scale(0.94);
+  background: #e11d48;
+  box-shadow: 0 0 35px #f43f5e;
+}
+
+.estop-icon {
+  font-size: 2.2rem;
+}
+
+.estop-label {
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-align: center;
+  line-height: 1.2;
+  letter-spacing: 0.5px;
+}
+
+/* Layout B: D-Pad Layout */
+.dpad-deck {
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+}
+
+.dpad-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.dpad-middle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dpad-btn {
+  width: 95px;
+  height: 85px;
+  border-radius: 18px;
+}
+
+.dpad-center-hub {
+  width: 80px;
+  height: 85px;
+  background: #0f172a;
+  border: 2px solid var(--btn-border);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+}
+
+.dpad-hint {
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.full-width-estop {
+  width: 100%;
+  min-height: 60px;
+  height: 60px;
+  flex-direction: row;
+  border-radius: 14px;
+}
+
+.full-width-estop .estop-icon {
+  font-size: 1.4rem;
+}
+
+.full-width-estop .estop-label {
+  font-size: 0.85rem;
+}
+
+/* App Preferences & Settings Card */
+.settings-grid {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  display: none;
+}
+
+.slider {
+  width: 38px;
+  height: 22px;
+  background-color: #334155;
+  border-radius: 20px;
+  position: relative;
+  transition: 0.3s;
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  left: 3px;
+  top: 3px;
+  background-color: #ffffff;
+  transition: 0.3s;
+}
+
+.toggle-switch input:checked + .slider {
+  background-color: var(--sky-blue);
+}
+
+.toggle-switch input:checked + .slider::before {
+  transform: translateX(16px);
+}
+
+.toggle-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-sub);
+}
+
+/* Footer */
+.app-footer {
+  text-align: center;
+  padding: 8px;
+  font-size: 0.7rem;
+  color: var(--text-sub);
+  opacity: 0.7;
+}
+
+/* Responsive tweaks for larger mobile screens and tablets */
+@media (min-width: 600px) {
+  .app-container {
+    padding: 20px;
+    gap: 16px;
+  }
+
+  .btn-throttle, .btn-steering {
+    height: 120px;
+  }
+
+  .dpad-btn {
+    width: 120px;
+    height: 105px;
+  }
+}
