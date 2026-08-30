@@ -1,6 +1,6 @@
 {
-  "name": "RUEY ROY RC Boat Controller",
-  "short_name": "RUEY ROY RC",
+  "name": "RUEA ROY RC Boat Controller",
+  "short_name": "RUEA ROY RC",
   "description": "React Mobile Bluetooth Remote Controller for Arduino Nano RC Boat",
   "start_url": "/",
   "display": "standalone",

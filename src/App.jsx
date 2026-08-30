@@ -3,7 +3,8 @@ import { useHapticsAudio } from './hooks/useHapticsAudio';
 import { useBluetooth } from './hooks/useBluetooth';
 import { useControls } from './hooks/useControls';
 
-// Controller Components
+// Page Components
+import { HomePage } from './components/HomePage';
 import { Navigation } from './components/Navigation';
 import { Header } from './components/Header';
 import { ConnectionCard } from './components/ConnectionCard';
@@ -24,8 +25,8 @@ import { ResourceViewerModal } from './components/ResourceViewerModal';
 import { RESOURCES_DATA } from './data/resourcesData';
 
 export default function App() {
-  // Navigation & View State ('controller' | 'resources')
-  const [activeView, setActiveView] = useState('controller');
+  // Navigation & View State ('home' | 'controller' | 'resources')
+  const [activeView, setActiveView] = useState('home');
   const [activeLayout, setActiveLayout] = useState('split'); // 'split' | 'dpad'
 
   // Resources State
@@ -70,7 +71,8 @@ export default function App() {
     currentThrottleRef,
     currentSteeringRef,
     triggerHaptic,
-    playClickSound
+    playClickSound,
+    activeView
   });
 
   // Filter Resources List
@@ -101,63 +103,80 @@ export default function App() {
   };
 
   return (
-    <div class="app-container">
+    <div className="app-container">
       {/* Top View Router Navigation */}
       <Navigation activeView={activeView} setActiveView={setActiveView} />
 
       {/* Main Content Area */}
-      <main class="main-content">
-        {activeView === 'controller' ? (
+      <main className="main-content">
+        {activeView === 'home' ? (
+          /* ===================================================================
+             VIEW 0: HOME LANDING PAGE
+             =================================================================== */
+          <HomePage
+            onEnter={() => setActiveView('controller')}
+            onExploreDocs={() => {
+              setSelectedCategory('All');
+              setActiveView('resources');
+            }}
+          />
+        ) : activeView === 'controller' ? (
           /* ===================================================================
              VIEW 1: REMOTE CONTROLLER DECK
              =================================================================== */
           <>
             <Header isConnected={isConnected} deviceLabel={deviceLabel} />
 
-            <ConnectionCard
-              connectionMode={connectionMode}
-              setConnectionMode={setConnectionMode}
-              isConnected={isConnected}
-              onConnectWebBt={connectWebBluetoothOrSerial}
-              onConnectBridge={connectBridgeServer}
-              onDisconnect={disconnect}
-              bridgeHost={bridgeHost}
-              setBridgeHost={setBridgeHost}
-            />
+            <div className="controller-dashboard-grid">
+              <div className="dashboard-column side-column">
+                <ConnectionCard
+                  connectionMode={connectionMode}
+                  setConnectionMode={setConnectionMode}
+                  isConnected={isConnected}
+                  onConnectWebBt={connectWebBluetoothOrSerial}
+                  onConnectBridge={connectBridgeServer}
+                  onDisconnect={disconnect}
+                  bridgeHost={bridgeHost}
+                  setBridgeHost={setBridgeHost}
+                />
 
-            <TelemetryDeck
-              throttleState={throttleState}
-              steeringState={steeringState}
-              heartbeatTick={heartbeatTick}
-            />
+                <TelemetryDeck
+                  throttleState={throttleState}
+                  steeringState={steeringState}
+                  heartbeatTick={heartbeatTick}
+                />
 
-            <LayoutToggle
-              activeLayout={activeLayout}
-              setActiveLayout={setActiveLayout}
-            />
+                <SettingsCard
+                  hapticsEnabled={hapticsEnabled}
+                  setHapticsEnabled={setHapticsEnabled}
+                  audioEnabled={audioEnabled}
+                  setAudioEnabled={setAudioEnabled}
+                />
+              </div>
 
-            {activeLayout === 'split' ? (
-              <TouchDeckSplit
-                activeKeys={activeKeys}
-                onPress={handleControlPress}
-                onRelease={handleControlRelease}
-                onEstop={triggerEmergencyStop}
-              />
-            ) : (
-              <TouchDeckDpad
-                activeKeys={activeKeys}
-                onPress={handleControlPress}
-                onRelease={handleControlRelease}
-                onEstop={triggerEmergencyStop}
-              />
-            )}
+              <div className="dashboard-column main-controls-column">
+                <LayoutToggle
+                  activeLayout={activeLayout}
+                  setActiveLayout={setActiveLayout}
+                />
 
-            <SettingsCard
-              hapticsEnabled={hapticsEnabled}
-              setHapticsEnabled={setHapticsEnabled}
-              audioEnabled={audioEnabled}
-              setAudioEnabled={setAudioEnabled}
-            />
+                {activeLayout === 'split' ? (
+                  <TouchDeckSplit
+                    activeKeys={activeKeys}
+                    onPress={handleControlPress}
+                    onRelease={handleControlRelease}
+                    onEstop={triggerEmergencyStop}
+                  />
+                ) : (
+                  <TouchDeckDpad
+                    activeKeys={activeKeys}
+                    onPress={handleControlPress}
+                    onRelease={handleControlRelease}
+                    onEstop={triggerEmergencyStop}
+                  />
+                )}
+              </div>
+            </div>
           </>
         ) : (
           /* ===================================================================
@@ -175,7 +194,7 @@ export default function App() {
             />
 
             {filteredResources.length > 0 ? (
-              <div class="resources-grid">
+              <div className="resources-grid">
                 {filteredResources.map((res) => (
                   <ResourceCard
                     key={res.id}
@@ -204,7 +223,7 @@ export default function App() {
       )}
 
       {/* App Footer */}
-      <footer class="app-footer">
+      <footer className="app-footer">
         <p>Ruea-Roy RC Platform By SPR41 &bull; React Web & Resources Hub</p>
       </footer>
     </div>

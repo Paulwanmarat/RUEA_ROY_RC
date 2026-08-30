@@ -5,6 +5,13 @@ export function Navigation({ activeView, setActiveView }) {
     <nav className="top-navigation">
       <div className="nav-container">
         <button
+          className={`nav-tab ${activeView === 'home' ? 'active' : ''}`}
+          onClick={() => setActiveView('home')}
+        >
+          <span className="nav-icon">🏠</span>
+          <span>Home</span>
+        </button>
+        <button
           className={`nav-tab ${activeView === 'controller' ? 'active' : ''}`}
           onClick={() => setActiveView('controller')}
         >

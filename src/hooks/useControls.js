@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-export function useControls({ sendSerialChar, currentThrottleRef, currentSteeringRef, triggerHaptic, playClickSound }) {
+export function useControls({ sendSerialChar, currentThrottleRef, currentSteeringRef, triggerHaptic, playClickSound, activeView }) {
   const [activeKeys, setActiveKeys] = useState(new Set());
   const [throttleState, setThrottleState] = useState('N'); // 'U', 'D', 'N'
   const [steeringState, setSteeringState] = useState('C'); // 'L', 'R', 'C'
@@ -75,8 +75,16 @@ export function useControls({ sendSerialChar, currentThrottleRef, currentSteerin
     sendSerialChar('S');
   }, [currentSteeringRef, currentThrottleRef, playClickSound, sendSerialChar, triggerHaptic]);
 
-  // Keyboard Event Listeners
+  // Keyboard Event Listeners — only active on Controller view
   useEffect(() => {
+    if (activeView !== 'controller') {
+      // Clear any stuck keys when leaving the controller view
+      const emptySet = new Set();
+      activeKeysRef.current = emptySet;
+      setActiveKeys(emptySet);
+      return;
+    }
+
     const handleKeyDown = (e) => {
       if (e.repeat) return;
       const key = e.key.toLowerCase();
@@ -103,7 +111,7 @@ export function useControls({ sendSerialChar, currentThrottleRef, currentSteerin
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [handleControlPress, handleControlRelease, triggerEmergencyStop]);
+  }, [activeView, handleControlPress, handleControlRelease, triggerEmergencyStop]);
 
   return {
     activeKeys,
